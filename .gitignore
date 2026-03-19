@@ -1,0 +1,25 @@
+# Dependencies
+**/node_modules
+**/env
+**/venv
+**/.venv
+
+# Build & Logs
+**/build
+**/dist
+**/*.log
+
+# Environment & Secrets
+**/.env
+**/.env.*
+**/google_sheets_key.json
+**/nodal-alloy-*.json
+
+# Database
+**/*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
