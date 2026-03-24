@@ -3,6 +3,8 @@ import { motion } from 'framer-motion';
 import { User, BookOpen, GraduationCap, MessageCircle, Send, CheckCircle2, ChevronLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
+import { useAuth } from '../context/AuthContext';
+import { submitMentorshipRequest } from '../api';
 
 const MENTORS = [
   { id: 1, name: "Dr. Alex Rivera", expertise: "AI & Machine Learning", email: "alex.study@example.com" },
@@ -12,29 +14,37 @@ const MENTORS = [
 ];
 
 export default function MentorshipForm() {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [submitted, setSubmitted] = useState(false);
   const [formData, setFormData] = useState({
-    name: '',
-    year: '1st Year',
-    department: '',
     topic: '',
-    mentorId: ''
+    mentorId: 'general',
+    timePreference: 'Morning (9 AM - 12 PM)'
   });
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setSubmitted(true);
-    
-    // In a real app, this would call an API to send an email.
-    // We'll simulate the "email sent" behavior.
-    console.log("Mentorship Request Data:", formData);
-    
-    // Construct mailto link for demonstration if needed, 
-    // but a success screen is better for UX.
-    setTimeout(() => {
-        navigate('/community');
-    }, 3000);
+    if (!formData.topic) return alert('Please describe your topic.');
+
+    try {
+        await submitMentorshipRequest(
+            user?.uid || 'anonymous',
+            formData.name,
+            formData.mentorId,
+            formData.topic,
+            formData.department,
+            formData.timePreference,
+            formData.year
+        );
+        setSubmitted(true);
+        setTimeout(() => {
+            navigate('/community');
+        }, 3000);
+    } catch (err) {
+        console.error("Failed to submit mentorship request", err);
+        alert("Failed to send request.");
+    }
   };
 
   if (submitted) {
@@ -165,30 +175,34 @@ export default function MentorshipForm() {
             />
           </div>
 
-          {/* Mentor Selection */}
           <div style={{ marginBottom: '2.5rem' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 800, marginBottom: '1rem', textTransform: 'uppercase' }}>Select Your Mentor</label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
-              {MENTORS.map(m => (
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 800, marginBottom: '0.75rem', textTransform: 'uppercase' }}>
+              Time Preference
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+              {['Morning (9 AM - 12 PM)', 'Afternoon (12 PM - 4 PM)', 'Evening (4 PM - 8 PM)', 'Late Night (8 PM - 11 PM)'].map(time => (
                 <div 
-                  key={m.id}
-                  onClick={() => setFormData({...formData, mentorId: m.id})}
+                  key={time}
+                  onClick={() => setFormData({...formData, timePreference: time})}
                   style={{
-                    padding: '1rem',
-                    borderRadius: 'var(--radius-lg)',
-                    background: formData.mentorId === m.id ? 'var(--surface2)' : 'transparent',
-                    border: `2px solid ${formData.mentorId === m.id ? 'var(--accent)' : 'var(--border)'}`,
+                    padding: '0.85rem',
+                    borderRadius: 'var(--radius-md)',
+                    background: formData.timePreference === time ? 'var(--surface2)' : 'var(--bg)',
+                    border: `1px solid ${formData.timePreference === time ? 'var(--accent)' : 'var(--border)'}`,
                     cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    textAlign: 'left'
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    textAlign: 'center',
+                    transition: 'all 0.2s ease'
                   }}
                 >
-                  <div style={{ fontWeight: 800, fontSize: '0.9rem' }}>{m.name}</div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--muted)', fontWeight: 600 }}>{m.expertise}</div>
+                  {time}
                 </div>
               ))}
             </div>
           </div>
+
+
 
           <button 
             type="submit"

@@ -4,15 +4,17 @@ import { auth } from '../firebase';
 import { updateProfile, updatePassword } from 'firebase/auth';
 import { User, Lock, Mail, Save, LogOut, Eye, EyeOff, Volume2, VolumeX } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { updateUsername as updateBackendUsername } from '../api';
+import { updateUsername as updateBackendUsername, updateSpecialization as updateBackendSpecialization, updatePasswordBackend } from '../api';
 import PageTransition from '../components/PageTransition';
 import { useSound } from '../context/SoundContext';
+import { BookOpen } from 'lucide-react';
 
 export default function Profile() {
-  const { user, isGuest, logout, refreshUser } = useAuth();
+  const { user, isGuest, logout, refreshUser, role, specialization, updateSpecializationState } = useAuth();
   const { soundEnabled, toggleSound } = useSound();
   const navigate = useNavigate();
   const [displayName, setDisplayName] = useState(user?.displayName || '');
+  const [subjectSpecialization, setSubjectSpecialization] = useState(specialization || '');
   const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -46,6 +48,7 @@ export default function Profile() {
       if (newPassword) {
         try {
           await updatePassword(auth.currentUser, newPassword);
+          await updatePasswordBackend(newPassword, user.email);
           setMessage({ type: 'success', text: 'Password updated! Logging you out for security...' });
           setLoading(false);
           setTimeout(async () => {
@@ -65,6 +68,11 @@ export default function Profile() {
           throw pwErr;
         }
       }
+      if (role === 'mentor' && subjectSpecialization !== specialization) {
+        await updateBackendSpecialization(subjectSpecialization, user.email);
+        updateSpecializationState(subjectSpecialization, user.uid);
+      }
+      
       setMessage({ type: 'success', text: 'Profile updated successfully!' });
       setNewPassword('');
       refreshUser();
@@ -84,7 +92,23 @@ export default function Profile() {
   return (
     <PageTransition>
     <div className='page' style={{ maxWidth: '600px', width: '95%', margin: '0 auto' }}>
-      <h1>Account Settings</h1>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' }}>
+        <h1 style={{ margin: 0 }}>Account Settings</h1>
+        {!isGuest && (
+          <div style={{ 
+            padding: '0.4rem 0.8rem', 
+            background: role === 'mentor' ? 'rgba(236,72,153,0.1)' : 'rgba(108,99,255,0.1)', 
+            color: role === 'mentor' ? 'var(--accent2)' : 'var(--accent)', 
+            borderRadius: '99px', 
+            fontSize: '0.7rem', 
+            fontWeight: 800, 
+            textTransform: 'uppercase', 
+            letterSpacing: '0.05em' 
+          }}>
+            {role}
+          </div>
+        )}
+      </div>
       
       <div className='card' style={{ 
         display: 'flex', 
@@ -143,6 +167,26 @@ export default function Profile() {
               required
             />
           </div>
+
+          {/* Subject Specialization (Mentors Only) */}
+          {role === 'mentor' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              <label style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 700, letterSpacing: '0.05em' }}>
+                <BookOpen size={12} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
+                SUBJECT SPECIALIZATION
+              </label>
+              <input 
+                type='text' 
+                value={subjectSpecialization} 
+                onChange={(e) => setSubjectSpecialization(e.target.value)}
+                placeholder='e.g. Physics, Data Structures, Web Dev'
+                style={{ borderColor: 'var(--accent2)' }}
+              />
+              <p style={{ fontSize: '0.7rem', color: 'var(--muted)', marginTop: '0.2rem' }}>
+                This tag will appear next to your name in community discussions.
+              </p>
+            </div>
+          )}
 
           {/* New Password */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>

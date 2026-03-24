@@ -95,7 +95,7 @@ export default function Navbar() {
             letterSpacing: '-0.04em',
             whiteSpace: 'nowrap',
           }}>
-            ✦ <span className="nav-logo-text">study assistant</span>
+            ✦ <span className="nav-logo-text">Ai Study Assistant</span>
           </span>
         </NavLink>
 

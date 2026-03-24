@@ -5,24 +5,16 @@ import { useLocation } from 'react-router-dom';
 
 const TRACKS = [
   {
-    title: "Deep Focus Lofi",
-    url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3",
-    author: "Ambient Labs",
+    title: "AR Rahman Melodies",
+    url: "https://www.youtube.com/watch?v=a1NTKbiA3xg",
+    author: "Instrumental",
+    type: "youtube"
   },
   {
-    title: "Classical Study",
-    url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
-    author: "BrainWaves",
-  },
-  {
-    title: "Eco-Acoustic Flow",
-    url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3",
-    author: "Nature Study",
-  },
-  {
-    title: "Zen Workspace",
-    url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
-    author: "Minimalist",
+    title: "Morning Birdsong",
+    url: "https://www.youtube.com/watch?v=eKFTSSKCzWA",
+    author: "Wilderness Audio",
+    type: "youtube"
   }
 ];
 
@@ -32,29 +24,64 @@ export default function MusicPlayer() {
   const [isLooping, setIsLooping] = useState(false);
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [volume, setVolume] = useState(0.5);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [sleepTimer, setSleepTimer] = useState(null); // in minutes
   const [timeLeft, setTimeLeft] = useState(0); // in seconds
   
-  const audioRef = useRef(new Audio(TRACKS[0].url));
+  const audioRef = useRef(null);
+  if (!audioRef.current) {
+    audioRef.current = new Audio();
+  }
+  const youtubeRef = useRef(null);
   const location = useLocation();
+
+  const currentTrack = TRACKS[currentTrackIndex];
+  const isYoutube = currentTrack.type === 'youtube';
 
   const togglePlay = useCallback(() => {
     if (isPlaying) {
-      audioRef.current.pause();
+      if (isYoutube) {
+        youtubeRef.current?.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
+      } else {
+        audioRef.current.pause();
+      }
     } else {
-      audioRef.current.play().catch(err => console.log("Playback blocked:", err));
+      if (isYoutube) {
+        youtubeRef.current?.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
+      } else {
+        audioRef.current.play().catch(err => console.log("Playback blocked:", err));
+      }
     }
     setIsPlaying(!isPlaying);
-  }, [isPlaying]);
+  }, [isPlaying, isYoutube]);
 
   const handleNext = useCallback(() => {
+    // Stop current track
+    if (isYoutube) {
+      youtubeRef.current?.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
+    } else {
+      audioRef.current.pause();
+    }
+
     const nextIndex = (currentTrackIndex + 1) % TRACKS.length;
     setCurrentTrackIndex(nextIndex);
-    audioRef.current.src = TRACKS[nextIndex].url;
-    if (isPlaying) {
-      audioRef.current.play().catch(err => console.log("Playback blocked:", err));
+    const nextTrack = TRACKS[nextIndex];
+
+    if (nextTrack.type !== 'youtube') {
+      audioRef.current.src = nextTrack.url;
+      if (isPlaying) {
+        audioRef.current.play().catch(err => console.log("Playback blocked:", err));
+      }
+    } else {
+      // YouTube will load via iframe src update and play if autoplay enabled
+      if (isPlaying) {
+        setTimeout(() => {
+          youtubeRef.current?.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
+        }, 1000);
+      }
     }
-  }, [currentTrackIndex, isPlaying]);
+  }, [currentTrackIndex, isPlaying, isYoutube]);
 
   const startSleepTimer = useCallback((mins) => {
     if (sleepTimer === mins) {
@@ -74,9 +101,14 @@ export default function MusicPlayer() {
     const audio = audioRef.current;
     audio.volume = volume;
     
+    // Ensure src is set if it was somehow cleared and current track is not YouTube
+    if ((!audio.src || audio.src === window.location.href) && TRACKS[currentTrackIndex].type !== 'youtube') {
+      audio.src = TRACKS[currentTrackIndex].url;
+    }
+
     return () => {
       audio.pause();
-      audio.src = '';
+      // Don't clear src here anymore to avoid 'no supported sources' on quick remounts
     };
   }, []); // Only once on mount/unmount
 
@@ -93,15 +125,64 @@ export default function MusicPlayer() {
       }
     };
 
+    const handleTimeUpdate = () => {
+      setCurrentTime(audio.currentTime);
+      setDuration(audio.duration || 0);
+    };
+
     audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('timeupdate', handleTimeUpdate);
     return () => {
       audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
     };
-  }, [isLooping, handleNext]); // Update when loop or skip logic changes
+  }, [isLooping, handleNext]);
+
+  // Sync YouTube Volume & State Polling
+  useEffect(() => {
+    if (isYoutube && youtubeRef.current) {
+      youtubeRef.current.contentWindow.postMessage(JSON.stringify({
+        event: 'command',
+        func: 'setVolume',
+        args: [volume * 100]
+      }), '*');
+    } else if (audioRef.current) {
+      audioRef.current.volume = volume;
+    }
+  }, [volume, isYoutube]);
 
   useEffect(() => {
-    audioRef.current.volume = volume;
-  }, [volume]);
+    let interval;
+    if (isPlaying && isYoutube) {
+      // Poll YouTube for state (currentTime/duration)
+      interval = setInterval(() => {
+        if (youtubeRef.current) {
+          youtubeRef.current.contentWindow.postMessage(JSON.stringify({
+            event: 'listening',
+            id: 1,
+            channel: 'widget'
+          }), '*');
+        }
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isPlaying, isYoutube]);
+
+  // Listen for YouTube state updates
+  useEffect(() => {
+    const handleMessage = (e) => {
+      if (e.origin !== "https://www.youtube.com") return;
+      try {
+        const data = JSON.parse(e.data);
+        if (data.event === 'infoDelivery' && data.info) {
+          if (data.info.currentTime !== undefined) setCurrentTime(data.info.currentTime);
+          if (data.info.duration !== undefined) setDuration(data.info.duration);
+        }
+      } catch (err) {}
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   // Sleep Timer Countdown
   useEffect(() => {
@@ -197,6 +278,53 @@ export default function MusicPlayer() {
               </button>
             </div>
 
+            {/* Hidden Player Hooks */}
+            <div style={{ position: 'absolute', top: -1000, pointerEvents: 'none', visibility: 'hidden' }}>
+              {isYoutube && (
+                <iframe
+                  ref={youtubeRef}
+                  width="1" height="1"
+                  src={`https://www.youtube.com/embed/${currentTrack.url.split('v=')[1]}?enablejsapi=1&autoplay=0&controls=0&disablekb=1`}
+                  frameBorder="0"
+                  allow="autoplay; encrypted-media"
+                />
+              )}
+            </div>
+
+
+            {/* Progress Bar (Sleek) */}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--muted)', fontWeight: 700, marginBottom: '0.4rem', opacity: 0.8 }}>
+                <span>{formatTime(Math.floor(currentTime))}</span>
+                <span>{duration > 0 ? formatTime(Math.floor(duration)) : '--:--'}</span>
+              </div>
+              <div style={{ position: 'relative', height: '4px', background: 'var(--surface2)', borderRadius: '2px', cursor: 'pointer', overflow: 'hidden' }}
+                  onClick={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const pct = x / rect.width;
+                    if (isYoutube) {
+                      youtubeRef.current?.contentWindow.postMessage(JSON.stringify({
+                        event: 'command',
+                        func: 'seekTo',
+                        args: [pct * duration, true]
+                      }), '*');
+                    } else {
+                      audioRef.current.currentTime = pct * duration;
+                    }
+                  }}
+              >
+                <motion.div 
+                  initial={false}
+                  animate={{ width: duration > 0 ? `${(currentTime / duration) * 100}%` : '0%' }}
+                  style={{ 
+                    height: '100%', 
+                    background: 'var(--accent)',
+                    borderRadius: 'inherit'
+                  }} 
+                />
+              </div>
+            </div>
 
             {/* Track Info */}
             <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>

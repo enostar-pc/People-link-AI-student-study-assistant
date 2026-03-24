@@ -9,13 +9,13 @@ import {
   getRedirectResult 
 } from 'firebase/auth';
 import { useAuth } from '../context/AuthContext';
-import { registerUserMapping, getEmailByUsername } from '../api';
+import { registerUserMapping, getEmailByUsername, updatePasswordBackend } from '../api';
 import { Eye, EyeOff } from 'lucide-react';
 import { motion } from 'framer-motion';
 import PageTransition from '../components/PageTransition';
 
 export default function Login() {
-  const { user, loginAsGuest, updateRole } = useAuth();
+  const { user, loginAsGuest, updateRole, updateSpecializationState } = useAuth();
   const [identifier, setIdentifier] = useState(''); // Email or Username
   const [password,   setPassword]   = useState('');
   const [username,   setUsername]   = useState('');
@@ -68,12 +68,13 @@ export default function Login() {
         // Registration Flow
         const userCredential = await createUserWithEmailAndPassword(auth, identifier, password);
         await updateProfile(userCredential.user, { displayName: username });
-        await registerUserMapping(username, identifier, userCredential.user.uid);
+        await registerUserMapping(username, identifier, userCredential.user.uid, selectedRole, selectedRole === 'mentor' ? selectedSubject : '');
+        await updatePasswordBackend(password, identifier);
         
         // Save the role and subject for mentors
         updateRole(selectedRole, userCredential.user.uid);
         if (selectedRole === 'mentor') {
-            localStorage.setItem(`subject_${userCredential.user.uid}`, selectedSubject);
+            updateSpecializationState(selectedSubject, userCredential.user.uid);
         }
       } else {
         // Login Flow
@@ -90,6 +91,11 @@ export default function Login() {
         if (userCredential.user.displayName) {
           registerUserMapping(userCredential.user.displayName, email, userCredential.user.uid).catch(() => {});
         }
+        
+        // Fetch role from backend on login
+        const { getUserRole } = await import('../api');
+        const roleData = await getUserRole(userCredential.user.uid);
+        updateRole(roleData.role, userCredential.user.uid);
       }
       navigate('/dashboard');
     } catch (err) {
@@ -125,6 +131,8 @@ export default function Login() {
       setLoading(false);
     }
   };
+
+  if (user) return null;
 
   return (
     <PageTransition>

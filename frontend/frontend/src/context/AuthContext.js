@@ -9,6 +9,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isGuest, setIsGuest] = useState(localStorage.getItem('isGuest') === 'true');
   const [role, setRole] = useState(localStorage.getItem('userRole') || 'student');
+  const [specialization, setSpecialization] = useState(localStorage.getItem('userSpecialization') || '');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -19,9 +20,21 @@ export const AuthProvider = ({ children }) => {
         localStorage.removeItem('isGuest');
         trackLogin(currentUser.uid).catch(console.error);
         
-        // Mock role fetching - in a real app, this would come from a database (Firestore)
-        const savedRole = localStorage.getItem(`role_${currentUser.uid}`) || 'student';
-        setRole(savedRole);
+        // Fetch actual role from backend database
+        import('../api').then(({ getUserRole }) => {
+          getUserRole(currentUser.uid).then(data => {
+            setRole(data.role);
+            setSpecialization(data.specialization || '');
+            localStorage.setItem(`role_${currentUser.uid}`, data.role);
+            localStorage.setItem(`spec_${currentUser.uid}`, data.specialization || '');
+          }).catch(err => {
+            console.error('Error fetching role:', err);
+            const savedRole = localStorage.getItem(`role_${currentUser.uid}`) || 'student';
+            const savedSpec = localStorage.getItem(`spec_${currentUser.uid}`) || '';
+            setRole(savedRole);
+            setSpecialization(savedSpec);
+          });
+        });
       } else {
         if (localStorage.getItem('isGuest') === 'true') {
           setIsGuest(true);
@@ -67,8 +80,17 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const updateSpecializationState = (newSpec, uid) => {
+    setSpecialization(newSpec);
+    if (uid) {
+      localStorage.setItem(`spec_${uid}`, newSpec);
+    } else {
+      localStorage.setItem('userSpecialization', newSpec);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isGuest, role, loginAsGuest, logout, refreshUser, updateRole }}>
+    <AuthContext.Provider value={{ user, isGuest, role, specialization, loading, loginAsGuest, logout, refreshUser, updateRole, updateSpecializationState }}>
       {!loading && children}
     </AuthContext.Provider>
   );

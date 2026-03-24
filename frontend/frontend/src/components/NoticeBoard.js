@@ -1,55 +1,29 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, Search, Filter, ExternalLink, RefreshCw, Clock, Tag } from 'lucide-react';
+import { getLiveNotices } from '../api';
 
 const CATEGORIES = ['All', 'Results', 'Admissions', 'Exams', 'Events'];
 
-// Mock API function to simulate real-time updates
 const fetchEngineeringNotices = async () => {
-  // In a real app, this would be: fetch('https://api.example.com/notices')
-  return [
-    {
-      id: 1,
-      title: 'Graduate Aptitude Test in Engineering (GATE) 2026 Registration Open',
-      category: 'Exams',
-      timestamp: new Date().toISOString(),
-      url: 'https://gate.iitm.ac.in/',
-      description: 'Registration for GATE 2026 for engineering graduates is now open. Check eligibility and important dates.',
-      isNew: true,
-    },
-    {
-      id: 2,
-      title: 'State Technical University Results Published - Autumn Semester',
-      category: 'Results',
-      timestamp: new Date(Date.now() - 3600000).toISOString(),
-      url: '#',
-      description: 'Results for the 3rd and 5th-semester civil engineering students have been announced online.',
-    },
-    {
-      id: 3,
-      title: 'Global Tech Summit 2026: AI in Robotics Workshop',
-      category: 'Events',
-      timestamp: new Date(Date.now() - 14400000).toISOString(),
-      url: '#',
-      description: 'Join the international workshop on Robotics and AI. Free registration for students till end of month.',
-    },
-    {
-      id: 4,
-      title: 'M.Tech Admissions 2026: NIT Selection List (Phase 1)',
-      category: 'Admissions',
-      timestamp: new Date(Date.now() - 86400000).toISOString(),
-      url: '#',
-      description: 'The first phase selection list for Master of Technology programs across NITs has been released.',
-    },
-    {
-      id: 5,
-      title: 'Inter-College Coding Competition: Deadline Extended',
-      category: 'Events',
-      timestamp: new Date(Date.now() - 172800000).toISOString(),
-      url: '#',
-      description: 'The deadline for the national-level hackathon has been extended by 48 hours. Form your teams now.',
-    },
-  ];
+  try {
+    const data = await getLiveNotices();
+    return data;
+  } catch (error) {
+    console.error('Live Fetch Failed, using fallback:', error);
+    return [
+      {
+        id: 1,
+        title: 'GATE 2026 Registration Phase 2 - New Guidelines',
+        category: 'Exams',
+        timestamp: new Date().toISOString(),
+        url: 'https://gate.iitm.ac.in/',
+        description: 'New guidelines for phase 2 registration for engineering graduates. Check official portal.',
+        isNew: true,
+      },
+      // ... minimal fallback
+    ];
+  }
 };
 
 export default function NoticeBoard() {
@@ -60,6 +34,7 @@ export default function NoticeBoard() {
   const [activeCategory, setActiveCategory] = useState('All');
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(10);
   
   const tickerRef = useRef(null);
 
@@ -253,7 +228,7 @@ export default function NoticeBoard() {
               </div>
             ))
           ) : filteredNotices.length > 0 ? (
-            filteredNotices.map((notice) => (
+            filteredNotices.slice(0, visibleCount).map((notice) => (
               <motion.div
                 key={notice.id}
                 layout
@@ -365,6 +340,38 @@ export default function NoticeBoard() {
           )}
         </AnimatePresence>
       </div>
+
+      {filteredNotices.length > visibleCount && (
+        <div style={{ textAlign: 'center', marginTop: '3rem' }}>
+          <button
+            onClick={() => setVisibleCount(prev => prev + 10)}
+            style={{
+              padding: '0.75rem 2rem',
+              borderRadius: 'var(--radius-xl)',
+              background: 'var(--surface)',
+              color: 'var(--accent)',
+              border: '1px solid var(--border)',
+              fontWeight: 800,
+              fontSize: 'var(--font-sm)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'var(--accent)';
+              e.currentTarget.style.color = '#fff';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'var(--surface)';
+              e.currentTarget.style.color = 'var(--accent)';
+            }}
+          >
+            Load More Day-to-Day News
+          </button>
+        </div>
+      )}
       
       <div style={{ 
         marginTop: '2rem', 

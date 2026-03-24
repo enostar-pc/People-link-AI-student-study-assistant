@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useEffect } from 'react';
 import { motion, useSpring, useMotionValue } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { 
   Book, 
   Settings, 
@@ -106,6 +107,7 @@ const FloatingObject = ({ item, mouseX, mouseY }) => {
 export default function Landing() {
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const { user, isGuest } = useAuth();
   const isDark = theme === 'dark';
   
   const mouseX = useMotionValue(-1000);
@@ -114,6 +116,13 @@ export default function Landing() {
   // Smooth cursor glow
   const cursorSpringX = useSpring(mouseX, { damping: 30, stiffness: 200 });
   const cursorSpringY = useSpring(mouseY, { damping: 30, stiffness: 200 });
+
+  // Redirect to dashboard if already logged in
+  useEffect(() => {
+    if (user || isGuest) {
+      navigate('/dashboard');
+    }
+  }, [user, isGuest, navigate]);
 
   useEffect(() => {
     const handleGlobalMouseMove = (e) => {
@@ -250,7 +259,7 @@ export default function Landing() {
         <motion.button
           whileHover={{ y: -4, boxShadow: isDark ? '0 20px 40px rgba(108, 99, 255, 0.2)' : '0 20px 40px rgba(79, 70, 229, 0.25)' }}
           whileTap={{ scale: 0.96 }}
-          onClick={() => navigate('/login')}
+          onClick={() => navigate(user || isGuest ? '/dashboard' : '/login')}
           className="btn btn-primary"
           style={{
             padding: '1.25rem 3rem',
@@ -265,7 +274,7 @@ export default function Landing() {
             width: 'clamp(200px, 90%, 320px)'
           }}
         >
-          Start Exploring
+          {user || isGuest ? 'Go to Dashboard' : 'Start Exploring'}
           <ChevronRight size={24} />
         </motion.button>
       </motion.div>

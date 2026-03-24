@@ -45,6 +45,15 @@ const cards = [
     border: 'rgba(245,158,11,0.2)',
     iconBg: 'linear-gradient(135deg, #f59e0b, #ef4444)',
   },
+  {
+    to: '/planner',
+    icon: '🗓️',
+    title: 'Study Planner',
+    desc: 'Organize your study schedule with AI-generated roadmaps',
+    gradient: 'linear-gradient(135deg, rgba(167,139,250,0.1), rgba(108,99,255,0.05))',
+    border: 'rgba(167,139,250,0.2)',
+    iconBg: 'linear-gradient(135deg, #a78bfa, #6c63ff)',
+  },
 ];
 
 export default function Dashboard() {

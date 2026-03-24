@@ -5,7 +5,11 @@ const SoundContext = createContext();
 export function SoundProvider({ children }) {
   const [soundEnabled, setSoundEnabled] = useState(localStorage.getItem('soundEnabled') !== 'false');
 
-  const audioRef = useRef(new Audio('https://www.soundjay.com/buttons/sounds/button-16.mp3'));
+  const audioRef = useRef(null);
+  if (!audioRef.current) {
+    audioRef.current = new Audio('/sounds/click_sound_reality.mp3');
+    audioRef.current.load();
+  }
 
   useEffect(() => {
     localStorage.setItem('soundEnabled', soundEnabled);

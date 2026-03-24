@@ -59,8 +59,13 @@ export const updateUsername = async (new_username, email) => {
   return res.data;
 };
 
-export const registerUserMapping = async (username, email, userId) => {
-  const res = await axios.post(`${API}/api/users/register/`, { username, email, user_id: userId });
+export const registerUserMapping = async (username, email, userId, role = 'student', specialization = '') => {
+  const res = await axios.post(`${API}/api/users/register/`, { username, email, user_id: userId, role, specialization });
+  return res.data;
+};
+
+export const getUserRole = async (userId) => {
+  const res = await axios.get(`${API}/api/users/role/${userId}`);
   return res.data;
 };
 
@@ -88,5 +93,76 @@ export const analyzeResume = async (file, domain, goals) => {
   const res = await axios.post(`${API}/api/career/analyze/`, form, {
     headers: { 'Content-Type': 'multipart/form-data' }
   });
+  return res.data;
+};
+
+export const submitMentorshipRequest = async (studentId, studentName, mentorId, topic, department, timePreference, yearOfStudy) => {
+  const res = await axios.post(`${API}/api/mentorship/request/`, {
+    student_id: studentId, 
+    student_name: studentName, 
+    mentor_id: mentorId, 
+    topic, 
+    department, 
+    time_preference: timePreference,
+    year_of_study: yearOfStudy
+  });
+  return res.data;
+};
+
+export const resolveMentorshipRequest = async (requestId) => {
+  const res = await axios.post(`${API}/api/mentorship/resolve/`, {
+    request_id: requestId
+  });
+  return res.data;
+};
+
+export const addMentorshipReply = async (requestId, mentorId, mentorName, message, specialization) => {
+  const res = await axios.post(`${API}/api/mentorship/reply/`, {
+    request_id: requestId,
+    mentor_id: mentorId,
+    mentor_name: mentorName,
+    message: message,
+    specialization: specialization
+  });
+  return res.data;
+};
+
+export const getStudentRequests = async (userId) => {
+  const res = await axios.get(`${API}/api/mentorship/student-requests/${userId}`);
+  return res.data;
+};
+
+export const getMentorProgress = async (userId) => {
+  const res = await axios.get(`${API}/api/notes/mentor_progress/${userId}`);
+  return res.data;
+};
+
+export const updateSpecialization = async (specialization, email) => {
+  const res = await axios.post(`${API}/api/users/update-specialization/`, { specialization, email });
+  return res.data;
+};
+
+export const updatePasswordBackend = async (password, email) => {
+  const res = await axios.post(`${API}/api/users/update-password/`, { password, email });
+  return res.data;
+};
+
+export const getStudyRooms = async () => {
+  const res = await axios.get(`${API}/api/community/rooms/`);
+  return res.data;
+};
+
+export const createStudyRoom = async (roomData) => {
+  const res = await axios.post(`${API}/api/community/rooms/`, roomData);
+  return res.data;
+};
+
+export const deleteStudyRoom = async (roomId) => {
+  const res = await axios.delete(`${API}/api/community/rooms/${roomId}/`);
+  return res.data;
+};
+
+export const getLiveNotices = async () => {
+  const res = await axios.get(`${API}/api/notices/live`);
   return res.data;
 };

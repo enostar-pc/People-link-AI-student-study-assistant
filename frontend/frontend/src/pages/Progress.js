@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getProgress } from '../api';
+import { getProgress, getMentorProgress } from '../api';
 import Highcharts from 'highcharts';
 import HighchartsReact from 'highcharts-react-official';
 import { useTheme } from '../context/ThemeContext';
@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import PageTransition from '../components/PageTransition';
 
 export default function Progress() {
-  const { user, isGuest, loading: authLoading } = useAuth();
+  const { user, isGuest, role, loading: authLoading } = useAuth();
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
@@ -20,11 +20,12 @@ export default function Progress() {
       return;
     }
     setLoading(true);
-    getProgress(user.uid)
+    const fetchProgress = role === 'mentor' ? getMentorProgress(user.uid) : getProgress(user.uid);
+    fetchProgress
       .then(d => setData(d))
       .catch(() => setError('Could not load progress'))
       .finally(() => setLoading(false));
-  }, [user, isGuest]);
+  }, [user, isGuest, role]);
 
   if (authLoading || loading) return (
     <PageTransition>
@@ -168,6 +169,7 @@ export default function Progress() {
   };
 
   const getStatus = (avg) => {
+    if (avg === undefined) return { label: 'Active', color: '#6c63ff' };
     if (avg >= 90) return { label: 'Elite', color: '#10b981' };
     if (avg >= 75) return { label: 'Expert', color: '#3b82f6' };
     if (avg >= 50) return { label: 'Adept', color: '#f59e0b' };
@@ -182,14 +184,16 @@ export default function Progress() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '3rem' }}>
         <div>
           <div style={{ display: 'inline-block', padding: '0.35rem 0.85rem', background: `${status.color}15`, color: status.color, borderRadius: '99px', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
-             {status.label} Status
+             {role === 'mentor' ? 'Mentor' : status.label} Status
           </div>
-          <h1 style={{ marginBottom: 0 }}>Engineering <span style={{ color: status.color, WebkitTextFillColor: 'initial' }}>Progress</span></h1>
+          <h1 style={{ marginBottom: 0 }}>{role === 'mentor' ? 'Mentorship ' : 'Engineering '}<span style={{ color: status.color, WebkitTextFillColor: 'initial' }}>Progress</span></h1>
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: '3rem', fontWeight: 900, color: 'var(--text)', lineHeight: 1 }}>{data.avg_score}%</div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: '0.5rem' }}>Global Mastery</div>
-        </div>
+        {role !== 'mentor' && (
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '3rem', fontWeight: 900, color: 'var(--text)', lineHeight: 1 }}>{data.avg_score || 0}%</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: '0.5rem' }}>Global Mastery</div>
+          </div>
+        )}
       </div>
 
       {/* Stat cards */}
@@ -199,12 +203,16 @@ export default function Progress() {
         gap: '0.85rem', 
         marginBottom: '2rem' 
       }}>
-        {[
-          { label: 'Analyses', val: data.total_notes, icon: '📄', color: '#6c63ff' },
-          { label: 'Skill Tests', val: data.total_quizzes, icon: '✓', color: '#10b981' },
+        {(role === 'mentor' ? [
+          { label: 'Students Attended', val: data.total_attended || 0, icon: '👨‍🎓', color: '#6c63ff' },
           { label: 'Hot Streak', val: `${data.streak || 0}d`, icon: '🔥', color: '#ef4444' },
           { label: 'Knowledge Nodes', val: data.subjects?.length || 0, icon: '✦', color: '#f59e0b' },
-        ].map(({ label, val, icon, color }) => (
+        ] : [
+          { label: 'Analyses', val: data.total_notes || 0, icon: '📄', color: '#6c63ff' },
+          { label: 'Skill Tests', val: data.total_quizzes || 0, icon: '✓', color: '#10b981' },
+          { label: 'Hot Streak', val: `${data.streak || 0}d`, icon: '🔥', color: '#ef4444' },
+          { label: 'Knowledge Nodes', val: data.subjects?.length || 0, icon: '✦', color: '#f59e0b' },
+        ]).map(({ label, val, icon, color }) => (
           <div className='card' key={label} style={{ 
             background: isDark ? `rgba(${color === '#6c63ff' ? '108,99,255' : color === '#10b981' ? '16,185,129' : color === '#ef4444' ? '239,68,68' : '245,158,11'}, 0.05)` : '#fff',
             textAlign: 'center', 
@@ -222,13 +230,15 @@ export default function Progress() {
 
       <div className='responsive-split' style={{ display: 'flex', gap: '1.5rem' }}>
         {/* performance dynamics chart */}
-        <div className='card' style={{ flex: 2, padding: window.innerWidth < 800 ? '1.25rem' : '2rem' }}>
-          <h2 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ width: 4, height: 18, background: 'var(--accent)', borderRadius: 2 }}></span>
-            Performance Dynamics
-          </h2>
-          <HighchartsReact highcharts={Highcharts} options={performanceOptions} />
-        </div>
+        {role !== 'mentor' && (
+          <div className='card' style={{ flex: 2, padding: window.innerWidth < 800 ? '1.25rem' : '2rem' }}>
+            <h2 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ width: 4, height: 18, background: 'var(--accent)', borderRadius: 2 }}></span>
+              Performance Dynamics
+            </h2>
+            <HighchartsReact highcharts={Highcharts} options={performanceOptions} />
+          </div>
+        )}
 
         {/* Attendance Calendar */}
         <div className='card' style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
