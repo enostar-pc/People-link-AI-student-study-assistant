@@ -5,7 +5,7 @@ import os
 try:
     sheet_id = "1tAgy_9Xll6tZv6iY6pRA_h3YIs9aQpIQZa1Nvl7jM30"
     scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-    key_path = r"D:\People link project\backend\google_sheets_key.json"
+    key_path = os.path.join(os.path.dirname(__file__), "google_sheets_key.json")
     
     print(f"Checking for key at: {key_path}")
     if os.path.exists(key_path):

@@ -15,8 +15,8 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
-from .views import status, register_user, get_email_by_username, update_username, track_login, ask_question, summarize_file, generate_quiz, get_progress, save_score, get_user_summaries, get_chat_history, submit_feedback, analyze_resume
+from django.urls import path, include
+from .views import status, register_user, get_email_by_username, update_username, track_login, ask_question, summarize_file, generate_quiz, get_progress, save_score, get_user_summaries, get_chat_history, submit_feedback, analyze_resume, submit_mentorship_request, resolve_mentorship_request, get_mentor_progress, get_pending_requests, get_user_role, add_mentorship_reply, get_student_requests, update_specialization, update_password, study_rooms, delete_study_room, get_live_notices
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -34,4 +34,16 @@ urlpatterns = [
     path('api/notes/progress/<str:user_id>', get_progress),
     path('api/feedback/', submit_feedback),
     path('api/career/analyze/', analyze_resume),
+    path('api/mentorship/request/', submit_mentorship_request),
+    path('api/mentorship/resolve/', resolve_mentorship_request),
+    path('api/notes/mentor_progress/<str:user_id>', get_mentor_progress),
+    path('api/mentorship/requests/<str:user_id>', get_pending_requests),
+    path('api/users/role/<str:user_id>', get_user_role),
+    path('api/mentorship/reply/', add_mentorship_reply),
+    path('api/mentorship/student-requests/<str:user_id>', get_student_requests),
+    path('api/users/update-specialization/', update_specialization),
+    path('api/users/update-password/', update_password),
+    path('api/community/rooms/', study_rooms),
+    path('api/community/rooms/<str:room_id>/', delete_study_room),
+    path('api/notices/live', get_live_notices),
 ]

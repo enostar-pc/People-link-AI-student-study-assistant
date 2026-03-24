@@ -1,0 +1,68 @@
+﻿.\env\Scripts\python : 
+Traceback (most recent call 
+last):
+At line:1 char:1
++ .\env\Scripts\python 
+manage.py runserver 
+0.0.0.0:8000 --noreload 2>&1 
+...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~
+    + CategoryInfo          : 
+    NotSpecified: (Traceback  
+   (most recent call last):   
+ :String) [], RemoteExcept    
+ion
+    + FullyQualifiedErrorId : 
+    NativeCommandError
+ 
+  File "D:\People link 
+project\backend\manage.py", 
+line 22, in <module>
+    main()
+    ~~~~^^
+  File "D:\People link 
+project\backend\manage.py", 
+line 18, in main
+    execute_from_command_line(
+sys.argv)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^
+^^^^^^^^^
+  File "D:\People link project
+\backend\env\Lib\site-packages
+\django\core\management\__init
+__.py", line 443, in 
+execute_from_command_line
+    utility.execute()
+    ~~~~~~~~~~~~~~~^^
+  File "D:\People link project
+\backend\env\Lib\site-packages
+\django\core\management\__init
+__.py", line 417, in execute
+    django.setup()
+    ~~~~~~~~~~~~^^
+  File "D:\People link project
+\backend\env\Lib\site-packages
+\django\__init__.py", line 
+24, in setup
+    apps.populate(settings.INS
+TALLED_APPS)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^
+^^^^^^^^^^^^
+  File "D:\People link project
+\backend\env\Lib\site-packages
+\django\apps\registry.py", 
+line 91, in populate
+    app_config = 
+AppConfig.create(entry)
+  File "D:\People link project
+\backend\env\Lib\site-packages
+\django\apps\config.py", line 
+171, in create
+    mod_path, _, cls_name = 
+entry.rpartition(".")
+                            
+^^^^^^^^^^^^^^^^
+AttributeError: 'list' object 
+has no attribute 'rpartition'

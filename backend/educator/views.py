@@ -18,6 +18,7 @@ import io
 import gspread
 from google.oauth2.service_account import Credentials
 from django.core.mail import EmailMessage
+from django.contrib.auth.hashers import make_password
 
 # Load environment variables
 load_dotenv()
@@ -27,17 +28,15 @@ logging.basicConfig(filename='backend_errors.log', level=logging.ERROR)
 
 def call_gemini_with_fallback(client, contents, config=None, is_prompt=False):
     """
-    Attempts to generate content using multiple Gemini models in sequence
-    to avoid 'Quota Exceeded' errors.
+    Attempts to generate content using Gemini, with an immediate fallback to Groq
+    if Gemini's quota is exhausted (429) or other errors occur.
     """
-    models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"]
+    models = ["gemini-2.0-flash", "gemini-1.5-flash"]
     last_error = None
 
     for model_name in models:
         try:
             print(f">>> TRYING {model_name}...")
-            # For this SDK, the model name might need to be exactly as shown in list()
-            # but usually the short name works. We try anyway.
             response = client.models.generate_content(
                 model=model_name,
                 contents=contents,
@@ -46,32 +45,36 @@ def call_gemini_with_fallback(client, contents, config=None, is_prompt=False):
             return response.text
         except Exception as e:
             last_error = e
-            msg = f">>> {model_name} FAILED: {str(e)}"
-            print(msg)
-            logging.error(msg)
-            time.sleep(0.5)
+            error_msg = str(e)
+            print(f">>> {model_name} FAILED: {error_msg}")
+            logging.error(f">>> {model_name} FAILED: {error_msg}")
+            
+            # If it's a 429 (Resource Exhausted), don't bother trying other Gemini models
+            # usually the quota is per-project or per-account.
+            if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+                print(">>> 429 Detected. Skipping further Gemini attempts to save time.")
+                break
+            
+            # For other errors (like 404), maybe another model works, but usually not.
+            # We'll try at most 2 models
             continue
     
-    # --- ULTIMATE FALLBACK: GROQ (LLAMA-3) ---
+    # --- FALLBACK: GROQ (LLAMA-3) ---
     groq_key = os.getenv('GROQ_API_KEY')
     if groq_key:
         try:
-            msg = ">>> GEMINI FAILED. CALLING GROQ (LLAMA-3)..."
-            print(msg)
-            logging.error(msg)
+            print(">>> CALLING GROQ (LLAMA-3.3-70B)...")
             groq_client = Groq(api_key=groq_key)
             
-            # Map Gemini format to OpenAI/Groq format
+            # Format messages for Groq (OpenAI-like format)
             messages = []
+            if config and config.get("system_instruction"):
+                messages.append({"role": "system", "content": config["system_instruction"]})
+            
             if is_prompt:
-                # 'contents' is just a string (the prompt)
-                if config and config.get("system_instruction"):
-                    messages.append({"role": "system", "content": config["system_instruction"]})
                 messages.append({"role": "user", "content": str(contents)})
             else:
-                # 'contents' is a list of Gemini-style message objects
-                if config and config.get("system_instruction"):
-                    messages.append({"role": "system", "content": config["system_instruction"]})
+                # contents is a list of Gemini content parts
                 for part in contents:
                     role = "assistant" if part.get("role") == "model" else "user"
                     text = part.get("parts", [{}])[0].get("text", "")
@@ -80,18 +83,17 @@ def call_gemini_with_fallback(client, contents, config=None, is_prompt=False):
             chat_completion = groq_client.chat.completions.create(
                 messages=messages,
                 model="llama-3.3-70b-versatile",
+                max_tokens=2048
             )
             return chat_completion.choices[0].message.content
         except Exception as ge:
-            msg = f">>> GROQ ALSO FAILED: {ge}"
-            print(msg)
-            logging.error(msg)
+            print(f">>> GROQ FAILED: {ge}")
+            logging.error(f">>> GROQ FAILED: {ge}")
             last_error = ge
 
-    # If all models fail, raise the last error
     if last_error:
         raise last_error
-    raise Exception("AI model generation failed across all fallbacks (Gemini & Groq)")
+    raise Exception("AI service unavailable (All models failed)")
 
 def extract_text_from_file(file):
     filename = file.name
@@ -129,16 +131,34 @@ def register_user(request):
             
             # Save to MongoDB
             users_col = db['users']
-            # Update or insert (upsert) based on email or uid
+            
+            # Build the update document
+            update_fields = {
+                "username": username,
+                "email": email,
+                "uid": uid,
+                "created_at": datetime.datetime.now().isoformat()
+            }
+            
+            # Only update role and specialization if provided in the data
+            if 'role' in data:
+                update_fields["role"] = data['role']
+            if 'specialization' in data:
+                update_fields["specialization"] = data['specialization']
+            
+            # For new users, we need defaults if not provided
+            # MongoDB's update_one with upsert can use $setOnInsert for things that should only be set when creating
+            set_on_insert = {}
+            if 'role' not in data:
+                set_on_insert["role"] = "student"
+            if 'specialization' not in data:
+                set_on_insert["specialization"] = ""
+
             users_col.update_one(
                 {"email": email},
                 {
-                    "$set": {
-                        "username": username,
-                        "email": email,
-                        "uid": uid,
-                        "created_at": datetime.datetime.now().isoformat()
-                    }
+                    "$set": update_fields,
+                    "$setOnInsert": set_on_insert
                 },
                 upsert=True
             )
@@ -226,6 +246,139 @@ def get_email_by_username(request):
     if user:
         return JsonResponse({"email": user['email']})
     return JsonResponse({"error": "User not found"}, status=404)
+
+def get_user_role(request, user_id):
+    if db is None:
+        return JsonResponse({"error": "Database connection unavailable"}, status=503)
+    try:
+        user_doc = db['users'].find_one({"uid": user_id})
+        if user_doc:
+            return JsonResponse({
+                "role": user_doc.get('role', 'student'),
+                "specialization": user_doc.get('specialization', '')
+            })
+        return JsonResponse({"role": "student", "specialization": ""})
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+@csrf_exempt
+def update_specialization(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            email = data.get('email')
+            specialization = data.get('specialization', '')
+            
+            if not email:
+                return JsonResponse({"error": "Missing email"}, status=400)
+                
+            if db is None:
+                return JsonResponse({"error": "Database connection unavailable"}, status=503)
+                
+            db['users'].update_one(
+                {"email": email},
+                {"$set": {"specialization": specialization}},
+                upsert=True
+            )
+            return JsonResponse({"message": "Specialization updated successfully"})
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+    return JsonResponse({"error": "Method not allowed"}, status=405)
+
+@csrf_exempt
+def update_password(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            email = data.get('email')
+            new_password = data.get('password')
+            
+            if not email or not new_password:
+                return JsonResponse({"error": "Missing fields"}, status=400)
+                
+            if db is None:
+                return JsonResponse({"error": "Database connection unavailable"}, status=503)
+            
+            hashed_pwd = make_password(new_password)
+            
+            db['users'].update_one(
+                {"email": email},
+                {"$set": {"password_hashed": hashed_pwd}},
+                upsert=True
+            )
+            return JsonResponse({"message": "Password updated in backend successfully"})
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+    return JsonResponse({"error": "Method not allowed"}, status=405)
+
+@csrf_exempt
+def study_rooms(request):
+    if request.method == 'GET':
+        try:
+            if db is None:
+                return JsonResponse({"error": "Database connection unavailable"}, status=503)
+            
+            rooms_col = db['study_rooms']
+            # Fetch all active rooms (optional: filter by timestamp if you want auto-expiry)
+            rooms = list(rooms_col.find().sort("created_at", -1))
+            
+            # Convert ObjectId to string
+            for r in rooms:
+                r['_id'] = str(r['_id'])
+                
+            return JsonResponse({"rooms": rooms})
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+            
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            mentor_id = data.get('mentor_id')
+            mentor_name = data.get('mentor_name')
+            room_name = data.get('name')
+            topic = data.get('topic')
+            meet_link = data.get('meet_link')
+            
+            if not all([mentor_id, mentor_name, room_name, topic, meet_link]):
+                return JsonResponse({"error": "Missing required fields"}, status=400)
+                
+            if db is None:
+                return JsonResponse({"error": "Database connection unavailable"}, status=503)
+                
+            rooms_col = db['study_rooms']
+            
+            new_room = {
+                "mentor_id": mentor_id,
+                "mentor_name": mentor_name,
+                "name": room_name,
+                "topic": topic,
+                "meet_link": meet_link,
+                "created_at": datetime.datetime.now().isoformat()
+            }
+            
+            result = rooms_col.insert_one(new_room)
+            new_room['_id'] = str(result.inserted_id)
+            
+            return JsonResponse({"message": "Room created successfully", "room": new_room})
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+    
+    return JsonResponse({"error": "Method not allowed"}, status=405)
+
+@csrf_exempt
+def delete_study_room(request, room_id):
+    if request.method == 'DELETE' or (request.method == 'POST' and request.POST.get('_method') == 'DELETE'):
+        try:
+            if db is None:
+                return JsonResponse({"error": "Database connection unavailable"}, status=503)
+                
+            rooms_col = db['study_rooms']
+            from bson import ObjectId
+            rooms_col.delete_one({"_id": ObjectId(room_id)})
+            return JsonResponse({"message": "Room deleted successfully"})
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+    return JsonResponse({"error": "Method not allowed"}, status=405)
 
 @csrf_exempt
 def ask_question(request):
@@ -747,3 +900,240 @@ def analyze_resume(request):
             return JsonResponse({"error": str(e)}, status=500)
     return JsonResponse({"error": "Method not allowed"}, status=405)
 
+@csrf_exempt
+def submit_mentorship_request(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            student_id = data.get('student_id', 'anonymous')
+            mentor_id = data.get('mentor_id')
+            topic = data.get('topic')
+            department = data.get('department')
+            student_name = data.get('student_name', 'Student')
+            time_preference = data.get('time_preference', 'Not specified')
+            year_of_study = data.get('year_of_study', 'Not specified')
+            
+            if not mentor_id or not topic:
+                return JsonResponse({"error": "Missing mentor_id or topic"}, status=400)
+                
+            if db is not None:
+                req_doc = {
+                    "student_id": student_id,
+                    "student_name": student_name,
+                    "mentor_id": str(mentor_id),
+                    "topic": topic,
+                    "department": department,
+                    "year_of_study": year_of_study,
+                    "time_preference": time_preference,
+                    "status": "pending",
+                    "timestamp": datetime.datetime.now().isoformat(),
+                    "replies": []
+                }
+                db['mentorship_requests'].insert_one(req_doc)
+                log_activity(student_id, "Mentorship Request", f"Requested mentorship for {topic}")
+                
+                # Proactive Notification: Send email to all registered mentors
+                try:
+                    mentors = list(db['users'].find({"role": "mentor"}, {"email": 1, "username": 1}))
+                    mentor_emails = [m['email'] for m in mentors if m.get('email')]
+                    
+                    if mentor_emails:
+                        subject = f"New Mentorship Request: {topic[:30]}..."
+                        body = f"Hello Mentor,\n\nA student has applied for mentorship.\n\n" \
+                               f"Student: {student_name}\n" \
+                               f"Department: {department}\n" \
+                               f"Topic: {topic}\n" \
+                               f"Preferred Time: {time_preference}\n\n" \
+                               f"Please log in to the Community Hub to accept or resolve this request.\n\n" \
+                               f"Best regards,\nPeople Link AI Assistant"
+                        
+                        email_msg = EmailMessage(
+                            subject,
+                            body,
+                            os.getenv('EMAIL_HOST_USER', 'noreply@ai-study-assistant.com'),
+                            mentor_emails # Send to all mentors
+                        )
+                        email_msg.send()
+                except Exception as mail_err:
+                    print(f"Mentorship notification email failed: {mail_err}")
+                
+            return JsonResponse({"message": "Request submitted successfully. Mentors have been notified."})
+        except Exception as e:
+            traceback.print_exc()
+            return JsonResponse({"error": str(e)}, status=500)
+    return JsonResponse({"error": "Method not allowed"}, status=405)
+
+@csrf_exempt
+def resolve_mentorship_request(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            request_id = data.get('request_id')
+            
+            if not request_id:
+                return JsonResponse({"error": "Missing request_id"}, status=400)
+                
+            if db is not None:
+                from bson import ObjectId
+                db['mentorship_requests'].update_one(
+                    {"_id": ObjectId(request_id)},
+                    {"$set": {"status": "resolved"}}
+                )
+            return JsonResponse({"message": "Request resolved"})
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+    return JsonResponse({"error": "Method not allowed"}, status=405)
+
+@csrf_exempt
+def get_mentor_progress(request, user_id):
+    if db is None:
+        return JsonResponse({"error": "Database connection unavailable"}, status=503)
+        
+    try:
+        all_reqs = list(db['mentorship_requests'].find({"mentor_id": user_id}))
+        
+        total_attended = len(all_reqs)
+        
+        subject_counts = {}
+        for r in all_reqs:
+            # We use department as the subject category for the knowledge mix
+            topic = r.get('department')
+            if not topic: 
+                topic = 'General'
+            subject_counts[topic] = subject_counts.get(topic, 0) + 1
+                
+        all_subjects = list(subject_counts.keys())
+        
+        login_recs = list(db['logins'].find({"user_id": user_id}, {"_id": 0, "date": 1}))
+        login_dates = sorted(list(set([r['date'] for r in login_recs])), reverse=True)
+        
+        user_doc = db['users'].find_one({"uid": user_id})
+        joined_at = user_doc.get('created_at', 'Unknown') if user_doc else 'Unknown'
+        
+        streak = 0
+        if login_dates:
+            today = datetime.datetime.now().date()
+            current_check = today
+            date_set = set(login_dates)
+            
+            if today.isoformat() not in date_set:
+                current_check = today - datetime.timedelta(days=1)
+                
+            while current_check.isoformat() in date_set:
+                streak += 1
+                current_check -= datetime.timedelta(days=1)
+                
+        return JsonResponse({
+            "total_attended": total_attended,
+            "subjects": all_subjects,
+            "subject_counts": subject_counts,
+            "login_dates": [r['date'] for r in login_recs],
+            "streak": streak,
+            "joined_at": joined_at
+        })
+    except Exception as e:
+        print(f"Mentor Progress Error: {e}")
+        return JsonResponse({"error": f"Failed to calculate progress: {str(e)}"}, status=500)
+
+def get_pending_requests(request, user_id):
+    if db is None:
+        return JsonResponse({"error": "Database connection unavailable"}, status=503)
+    try:
+        # Fetch requests for this specific mentor OR from the general pool
+        reqs = list(db['mentorship_requests'].find({
+            "$or": [{"mentor_id": user_id}, {"mentor_id": "general"}],
+            "status": "pending"
+        }))
+        for r in reqs:
+            r['_id'] = str(r['_id'])
+        return JsonResponse({"requests": reqs})
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+@csrf_exempt
+def add_mentorship_reply(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            request_id = data.get('request_id')
+            mentor_id = data.get('mentor_id')
+            mentor_name = data.get('mentor_name')
+            message = data.get('message')
+            
+            if not request_id or not message:
+                return JsonResponse({"error": "Missing request_id or message"}, status=400)
+                
+            if db is not None:
+                from bson import ObjectId
+                reply_obj = {
+                    "sender_id": mentor_id,
+                    "sender_name": mentor_name,
+                    "specialization": data.get('specialization', ''),
+                    "message": message,
+                    "timestamp": datetime.datetime.now().isoformat()
+                }
+                db['mentorship_requests'].update_one(
+                    {"_id": ObjectId(request_id)},
+                    {"$push": {"replies": reply_obj}}
+                )
+            return JsonResponse({"message": "Reply added successfully"})
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+    return JsonResponse({"error": "Method not allowed"}, status=405)
+
+def get_student_requests(request, user_id):
+    if db is None:
+        return JsonResponse({"error": "Database connection unavailable"}, status=503)
+    try:
+        reqs = list(db['mentorship_requests'].find({"student_id": user_id}).sort("timestamp", -1))
+        for r in reqs:
+            r['_id'] = str(r['_id'])
+        return JsonResponse({"requests": reqs})
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+@csrf_exempt
+def get_live_notices(request):
+    """Fetches real-world-like engineering notices using AI."""
+    try:
+        gemini_key = os.getenv('GEMINI_API_KEY')
+        if not gemini_key:
+            return JsonResponse({"error": "AI not configured"}, status=500)
+            
+        client = genai.Client(api_key=gemini_key)
+        
+        # Today's date context
+        now_str = datetime.datetime.now().strftime("%B %d, %Y")
+        
+        prompt = f"""Generate 15 highly relevant, realistic engineering and academic notices for today ({now_str}).
+        Focus on: GATE/GRE/TOEFL Exams, M.Tech/B.Tech Admissions, Results (Phase 1/2), and Global Tech Events.
+        
+        Output strictly as a JSON array of objects with these fields:
+        - id: (unique number)
+        - title: (Clear engineering/academic news title)
+        - category: (Exactly one of: Results, Admissions, Exams, Events)
+        - description: (One or two concise sentences)
+        - url: (Use a real major official URL if known, else an engineering news portal link)
+        - isNew: (true)
+        - timestamp: (ISO 8601 format for today or yesterday)
+        """
+        
+        ai_res = call_gemini_with_fallback(
+            client, 
+            prompt,
+            config={"system_instruction": "You are a professional educational news scraper. Output ONLY raw JSON."}
+        )
+        
+        # Robustly find the JSON part (in case model adds code blocks)
+        json_match = re.search(r"(\[.*\])", ai_res, re.DOTALL)
+        if json_match:
+            data = json.loads(json_match.group(1))
+        else:
+            data = json.loads(ai_res)
+            
+        return JsonResponse(data, safe=False)
+    except Exception as e:
+        # Fallback if AI fails completely - return something better than 500
+        print(f"Notice AI Error: {e}")
+        return JsonResponse([
+            {"id":1, "title":"GATE 2026 Registration Phase 2", "category":"Exams", "description":"Primary registration closed, late entry begins.", "isNew":True, "timestamp":datetime.datetime.now().isoformat()}
+        ], safe=False)

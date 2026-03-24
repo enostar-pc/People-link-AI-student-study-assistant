@@ -30,7 +30,10 @@ SECRET_KEY = 'django-insecure-8r+uofo203(vq!n)01nu_e+z7%o+t$%xgn#%+tgua$_w51c1-j
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['*'] # In production, replace with your Render URL
+RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+if RENDER_EXTERNAL_HOSTNAME:
+    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
 
 # Application definition
@@ -43,11 +46,14 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'corsheaders',
+    'rest_framework',
+    'whitenoise.runserver_nostatic',
 ]
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -122,6 +128,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # CORS Configuration
 CORS_ALLOW_ALL_ORIGINS = True  # For development. Change to specific origins in production.
@@ -134,3 +142,41 @@ EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True') == 'True'
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '') # Your email
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '') # Your app password
+
+# --- File Forge Configuration ---
+# Celery Configuration
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+
+# Celery Beat Schedule
+CELERY_BEAT_SCHEDULE = {
+    'cleanup-expired-files-every-hour': {
+        'task': 'file_forge.tasks.cleanup_expired_files',
+        'schedule': 3600.0,  # every hour
+    },
+}
+
+# REST Framework Configuration
+REST_FRAMEWORK = {
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny',
+    ],
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+        'rest_framework.parsers.MultiPartParser',
+        'rest_framework.parsers.FormParser',
+    ],
+}
+
+# File Forge App Settings
+FILE_FORGE_TEMP_DIR = os.path.join(BASE_DIR, 'tmp', 'file_forge')
+FILE_FORGE_MAX_SIZE_MB = 10
+FILE_FORGE_RETENTION_HOURS = 24  # Files deleted after this time
+LIBREOFFICE_PATH = os.getenv('LIBREOFFICE_PATH', 'soffice')  # Default to PATH, or provide full path
+
+# Ensure temp directory exists
+os.makedirs(FILE_FORGE_TEMP_DIR, exist_ok=True)

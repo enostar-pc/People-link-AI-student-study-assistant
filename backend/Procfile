@@ -1,0 +1,2 @@
+web: gunicorn educator.wsgi
+worker: celery -A educator worker --loglevel=info

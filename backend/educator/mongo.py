@@ -17,31 +17,28 @@ class MongoDB:
     _db = None
 
     @classmethod
-    def get_client(cls):
-        if cls._client is None:
-            try:
-                # Use a short timeout for the initial connection check
-                cls._client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
-                if cls._client:
-                    # Test connection
-                    cls._client.admin.command('ping')
-            except Exception as e:
-                print(f"Warning: Could not connect to MongoDB: {e}")
-                cls._client = None
-        return cls._client
-
-    @classmethod
     def get_db(cls):
         if cls._db is None:
             try:
-                client = cls.get_client()
-                if client:
+                # Try PRIMARY (Atlas/Env)
+                print(f"Connecting to: {MONGO_URI[:30]}...")
+                client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=3000)
+                client.admin.command('ping')
+                cls._client = client
+                cls._db = client[MONGO_DB_NAME]
+                print("Database: PRIMARY CONNECTED")
+            except Exception as e:
+                print(f"Primary DB Failed ({e}), trying LOCALHOST Fallback...")
+                try:
+                    # Try LOCALHOST Fallback
+                    client = MongoClient("mongodb://localhost:27017/", serverSelectionTimeoutMS=1500)
+                    client.admin.command('ping')
+                    cls._client = client
                     cls._db = client[MONGO_DB_NAME]
-                else:
-                    # Return a dummy object that doesn't crash on subscripting but fails on operations
+                    print("Database: LOCALHOST CONNECTED")
+                except Exception:
+                    print("Database: ALL CONNECTIONS FAILED. Operating without persistence.")
                     return None
-            except Exception:
-                return None
         return cls._db
 
 # Database instance for easy import
