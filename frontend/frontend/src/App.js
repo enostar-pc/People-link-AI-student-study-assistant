@@ -75,7 +75,12 @@ function AnimatedRoutes() {
       width: '100%',
       boxSizing: 'border-box',
       position: 'relative',
+      zIndex: 10,
     }}>
+      {/* Visual Heartbeat - Helps verify React is running on production */}
+      <div style={{ position: 'fixed', top: 5, right: 5, fontSize: '10px', color: 'red', zIndex: 9999, opacity: 0.5 }}>
+        People Link v2.2 Live
+      </div>
       <AnimatePresence mode="wait" initial={false}>
         <Routes location={location} key={location.pathname}>
           <Route path='/login'      element={<Login />} />

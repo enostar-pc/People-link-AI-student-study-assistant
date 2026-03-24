@@ -191,12 +191,12 @@ export default function Landing() {
 
       {/* Hero Content */}
       <motion.div
-        initial={{ opacity: 0, scale: 0.98 }}
+        initial={{ opacity: 1, scale: 1 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.8, ease: "easeOut" }}
         style={{ 
           textAlign: 'center', 
-          zIndex: 10, 
+          zIndex: 100, 
           maxWidth: '900px', 
           width: '100%',
           position: 'relative'
