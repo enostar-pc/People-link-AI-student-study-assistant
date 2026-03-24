@@ -65,7 +65,7 @@ function AnimatedRoutes() {
   }, [location.key, prevKey]);
 
   return (
-    <div style={{
+    <div id="app-viewport" style={{
       maxWidth: '1400px',
       margin: '0 auto',
       padding: window.innerWidth < 480 ? '0 0.75rem' : '0 1.5rem',
@@ -77,25 +77,21 @@ function AnimatedRoutes() {
       position: 'relative',
     }}>
       <AnimatePresence mode="wait" initial={false}>
-        {isTransitioning ? (
-          <SkeletonLoader key="skeleton" />
-        ) : (
-          <Routes location={location} key={location.pathname}>
-            <Route path='/login'      element={<Login />} />
-            <Route path='/'           element={<Landing />} />
-            <Route path='/dashboard'  element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-            <Route path='/upload'     element={<ProtectedRoute><Upload /></ProtectedRoute>} />
-            <Route path='/quiz'       element={<ProtectedRoute><Quiz /></ProtectedRoute>} />
-            <Route path='/chat'       element={<ProtectedRoute><Chat /></ProtectedRoute>} />
-            <Route path='/planner'    element={<ProtectedRoute><Planner /></ProtectedRoute>} />
-            <Route path='/community'  element={<ProtectedRoute><Community /></ProtectedRoute>} />
-            <Route path='/tools'      element={<ProtectedRoute><Tools /></ProtectedRoute>} />
-            <Route path='/career'     element={<ProtectedRoute><Career /></ProtectedRoute>} />
-            <Route path='/progress'   element={<ProtectedRoute><Progress /></ProtectedRoute>} />
-            <Route path='/profile'    element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-            <Route path='/apply-mentorship' element={<ProtectedRoute><MentorshipForm /></ProtectedRoute>} />
-          </Routes>
-        )}
+        <Routes location={location} key={location.pathname}>
+          <Route path='/login'      element={<Login />} />
+          <Route path='/'           element={<Landing />} />
+          <Route path='/dashboard'  element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path='/upload'     element={<ProtectedRoute><Upload /></ProtectedRoute>} />
+          <Route path='/quiz'       element={<ProtectedRoute><Quiz /></ProtectedRoute>} />
+          <Route path='/chat'       element={<ProtectedRoute><Chat /></ProtectedRoute>} />
+          <Route path='/planner'    element={<ProtectedRoute><Planner /></ProtectedRoute>} />
+          <Route path='/community'  element={<ProtectedRoute><Community /></ProtectedRoute>} />
+          <Route path='/tools'      element={<ProtectedRoute><Tools /></ProtectedRoute>} />
+          <Route path='/career'     element={<ProtectedRoute><Career /></ProtectedRoute>} />
+          <Route path='/progress'   element={<ProtectedRoute><Progress /></ProtectedRoute>} />
+          <Route path='/profile'    element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path='/apply-mentorship' element={<ProtectedRoute><MentorshipForm /></ProtectedRoute>} />
+        </Routes>
       </AnimatePresence>
 
       {/* Global floating micro-interactions */}
@@ -113,8 +109,13 @@ function AnimatedRoutes() {
 
 export default function App() {
   useEffect(() => {
-    const lenis = new Lenis({ autoRaf: true });
-    return () => lenis.destroy();
+    console.log("App Mounted - Deployment Release v2.1");
+    try {
+      const lenis = new Lenis({ autoRaf: true });
+      return () => lenis.destroy();
+    } catch (e) {
+      console.warn("Lenis initialization skipped:", e);
+    }
   }, []);
 
   return (
